@@ -83,7 +83,8 @@ static long device_ioctl(struct file *file, const unsigned int cmd, const unsign
     // validate_params assures that size is a proper value
     void *kbuf = kvmalloc(params.size, GFP_KERNEL);
     if (!kbuf) {
-        pr_warn("%s: could not allocate temporary buffer for %zu bytes\n", DEVICE_NAME, params.size);
+        pr_warn(
+            "%s: could not allocate temporary buffer for %zu bytes\n", DEVICE_NAME, params.size);
         return -ENOMEM;
     }
 
