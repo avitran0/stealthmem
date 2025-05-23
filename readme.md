@@ -1,6 +1,6 @@
 # stealthmem
 
-this is a linux kernel module to read and write process memory without getting detected
+this is a linux kernel module to read and write process memory without getting detected.
 
 ## installation
 
@@ -11,14 +11,17 @@ this is a linux kernel module to read and write process memory without getting d
 
 ## uninstallation
 
-run `make unload`, or restart computer. the module has to be loaded on every restart manually
+run `make unload`, or restart computer. the module has to be loaded on every restart manually.
 
 ## usage in a program
+
+you can copy these into your program, or use the header in the `include` directory.
 
 required struct and ioctl commands:
 
 ```c
 #include <fcntl.h>
+#include <stddef.h>
 #include <sys/ioctl.h>
 
 struct memory_params {

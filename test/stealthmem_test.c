@@ -1,21 +1,8 @@
-#include <fcntl.h>
+#include "../include/stealthmem.h"
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/ioctl.h>
-#include <time.h>
 #include <unistd.h>
-
-struct memory_params {
-    pid_t pid;
-    unsigned long addr;
-    size_t size;
-    void *buf;
-};
-
-#define IOCTL_MAGIC_READ 0xBC
-#define IOCTL_MAGIC_WRITE 0xBD
-#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC_READ, 1, struct memory_params)
-#define IOCTL_WRITE_MEM _IOWR(IOCTL_MAGIC_WRITE, 1, struct memory_params)
 
 int main() {
     int fd = open("/dev/stealthmem", O_RDWR);

@@ -1,23 +1,11 @@
+#include "../include/stealthmem.h"
+
 #include <linux/cdev.h>
 #include <linux/mm.h>
-#include <linux/pid.h>
+#include <linux/mm_types.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-
-#include "linux/mm_types.h"
-
-struct memory_params {
-    pid_t pid;
-    unsigned long addr;
-    size_t size;
-    void __user *buf;
-};
-
-#define IOCTL_MAGIC_READ 0xBC
-#define IOCTL_MAGIC_WRITE 0xBD
-#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC_READ, 1, struct memory_params)
-#define IOCTL_WRITE_MEM _IOWR(IOCTL_MAGIC_WRITE, 1, struct memory_params)
 
 #define DEVICE_NAME "stealthmem"
 #define MAX_READ_SIZE (1024 * 1024)
