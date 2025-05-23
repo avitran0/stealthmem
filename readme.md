@@ -96,3 +96,5 @@ if (bytes_written < 0) {
 the makefile generates a sample command line program from [test/user.c](test/user.c).
 
 this can be used with `./build/user <pid> <address> <size>`, where address might be in decimal or hexadecimal.
+
+there is also a sample rust program in [user/src/main.rs](user/src/main.rs), which does exactly the same thing as the c version.
