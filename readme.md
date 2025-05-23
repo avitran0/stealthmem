@@ -32,7 +32,7 @@ run `make unload`, or restart computer. the module has to be loaded on every res
 
 ## usage in a program
 
-you can copy these into your program, or use the header in the `include` directory.
+you can copy these into your program, or use the [header.](include/stealthmem.h)
 
 required struct and ioctl commands:
 
@@ -90,3 +90,9 @@ if (bytes_written < 0) {
   // success
 }
 ```
+
+## sample program
+
+the makefile generates a sample command line program from [test/user.c](test/user.c).
+
+this can be used with `./build/user <pid> <address> <size>`, where address might be in decimal or hexadecimal.
