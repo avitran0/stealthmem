@@ -18,6 +18,9 @@ run `make unload`, or restart computer. the module has to be loaded on every res
 required struct and ioctl command:
 
 ```c
+#include <fcntl.h>
+#include <sys/ioctl.h>
+
 struct read_memory_params {
     pid_t pid;
     unsigned long addr;
