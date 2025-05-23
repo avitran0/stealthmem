@@ -43,6 +43,7 @@ int main() {
 
     if (ret_read < 0) {
         perror("ioctl");
+        return 1;
     } else {
         printf("read %d bytes from pid %d at 0x%lx\n", ret_read, params.pid, params.addr);
         printf("read: %s : %s\n", (char *)params.buf, buffer);
@@ -54,11 +55,13 @@ int main() {
 
     if (ret_write < 0) {
         perror("ioctl");
+        return 1;
     } else {
         printf("wrote %d bytes from pid %d at 0x%lx\n", ret_write, params.pid, params.addr);
         printf("wrote: %s : %s\n", (char *)params.buf, buffer);
     }
 
+    printf("stealthmem test success\n");
     free(alloced_buf);
     close(fd);
     return 0;
