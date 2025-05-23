@@ -1,9 +1,10 @@
 KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
 BUILD_DIR := $(shell pwd)/build
 
-TEST_PROGRAM = stealthmem_test
+USER_PROGRAM = user
+TEST_PROGRAM = test
 
-all: module test
+all: module user test
 
 module:
 	mkdir -p $(BUILD_DIR)
@@ -11,7 +12,11 @@ module:
 	$(MAKE) -C $(KERNEL_DIR) M=$(BUILD_DIR) modules
 	@echo generated kernel module
 
-test: test/stealthmem_test.c
+user: test/user.c
+	gcc -Wall -Wextra -O3 -o build/$(USER_PROGRAM) $<
+	@echo generated test executable
+
+test: test/test.c
 	gcc -Wall -Wextra -O3 -o build/$(TEST_PROGRAM) $<
 	@echo generated test executable
 

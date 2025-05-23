@@ -2,6 +2,23 @@
 
 this is a linux kernel module to read and write process memory without getting detected.
 
+## requirements
+
+- kernel headers (see below)
+- `make`
+- `gcc`
+
+make and gcc are usually pre-installed on most distros.
+if not, search for how to install them on your specific os.
+
+### kernel headers
+
+- ubuntu/debian: `sudo apt-get install linux-headers-$(uname -r)`
+- fedora: `sudo dnf install kernel-devel-$(uname -r)`
+- centos/rhel (old): `sudo yum install kernel-devel-$(uname -r)`
+- arch: `sudo pacman -Syu linux-headers`
+- opensuse: `sudo zypper install kernel-devel`
+
 ## installation
 
 1. clone repository with `git clone https://github.com/avitran0/stealthmem`
