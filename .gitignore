@@ -1,3 +1,4 @@
 .cache
+.idea
 build
 compile_commands.json

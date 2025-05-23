@@ -11,9 +11,7 @@ module:
 	$(MAKE) -C $(KDIR) M=$(BUILD_DIR) modules
 	@echo generated kernel module
 
-test: $(TEST_PROGRAM)
-
-$(TEST_PROGRAM): test/stealthmem_test.c
+test: test/stealthmem_test.c
 	gcc -Wall -O3 -o build/$(TEST_PROGRAM) $<
 	@echo generated test executable
 
