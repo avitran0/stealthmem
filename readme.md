@@ -1,6 +1,6 @@
 # stealthmem
 
-this is a linux kernel module to read process memory without getting detected
+this is a linux kernel module to read and write process memory without getting detected
 
 ## installation
 
@@ -15,21 +15,23 @@ run `make unload`, or restart computer. the module has to be loaded on every res
 
 ## usage in a program
 
-required struct and ioctl command:
+required struct and ioctl commands:
 
 ```c
 #include <fcntl.h>
 #include <sys/ioctl.h>
 
-struct read_memory_params {
+struct memory_params {
     pid_t pid;
     unsigned long addr;
     size_t size;
     void *buf;
 };
 
-#define IOCTL_MAGIC 0xBC
-#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC, 1, struct read_memory_params)
+#define IOCTL_MAGIC_READ 0xBC
+#define IOCTL_MAGIC_WRITE 0xBD
+#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC_READ, 1, struct memory_params)
+#define IOCTL_WRITE_MEM _IOWR(IOCTL_MAGIC_WRITE, 1, struct memory_params)
 ```
 
 example:
@@ -39,7 +41,7 @@ int fd = open("/dev/stealthmem", O_RDWR);
 // check if open was successful
 
 // prepare parameters to read
-struct read_memory_params params = {
+struct memory_params params = {
     // pid of the process to read from
     .pid = getpid(),
     // address in the process to read from
@@ -52,6 +54,17 @@ struct read_memory_params params = {
 
 const int bytes_read = ioctl(fd, IOCTL_READ_MEM, &params);
 if (bytes_read < 0) {
+  // returns a negative error code (-EINVAL etc.) on failure
+} else {
+  // success
+}
+
+// if writing/reading string, don't forget the null terminator
+params.buf = "hello, world";
+params.size = 12;
+
+const int bytes_written = ioctl(fd, IOCTL_WRITE_MEM, &params);
+if (bytes_written < 0) {
   // returns a negative error code (-EINVAL etc.) on failure
 } else {
   // success

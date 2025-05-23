@@ -5,15 +5,19 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
-struct read_memory_params {
+#include "linux/mm_types.h"
+
+struct memory_params {
     pid_t pid;
     unsigned long addr;
     size_t size;
     void __user *buf;
 };
 
-#define IOCTL_MAGIC 0xBC
-#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC, 1, struct read_memory_params)
+#define IOCTL_MAGIC_READ 0xBC
+#define IOCTL_MAGIC_WRITE 0xBD
+#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC_READ, 1, struct memory_params)
+#define IOCTL_WRITE_MEM _IOWR(IOCTL_MAGIC_WRITE, 1, struct memory_params)
 
 #define DEVICE_NAME "stealthmem"
 #define MAX_READ_SIZE (1024 * 1024)
@@ -29,7 +33,7 @@ static struct device *stealthmem_device;
 static struct cdev stealthmem_cdev;
 
 // validate memory read parameters, so that id does not read bs data
-static bool validate_params(const struct read_memory_params *params) {
+static bool validate_params(const struct memory_params *params) {
     if (params->size == 0 || params->size > MAX_READ_SIZE) {
         pr_warn("%s: invalid size: %zu\n", DEVICE_NAME, params->size);
         return false;
@@ -46,7 +50,7 @@ static bool validate_params(const struct read_memory_params *params) {
 }
 
 // returns bytes read, or negative error code
-static int handle_memory_access(
+static int memory_read(
     struct task_struct *task, const unsigned long address, void *kbuf, const size_t size) {
     struct mm_struct *mm = get_task_mm(task);
     if (!mm) {
@@ -61,15 +65,31 @@ static int handle_memory_access(
     return bytes_read;
 }
 
+static int memory_write(
+    struct task_struct *task, const unsigned long address, void *kbuf, const size_t size) {
+    struct mm_struct *mm = get_task_mm(task);
+    if (!mm) {
+        return -ESRCH;
+    }
+
+    down_read(&mm->mmap_lock);
+    const int bytes_written =
+        access_process_vm(task, address, kbuf, (int)size, FOLL_WRITE | FOLL_FORCE);
+    up_read(&mm->mmap_lock);
+
+    mmput(mm);
+    return bytes_written;
+}
+
 static long device_ioctl(struct file *file, const unsigned int cmd, const unsigned long arg) {
     // only valid ioctl is our self-defined one
-    if (cmd != IOCTL_READ_MEM) {
+    if (cmd != IOCTL_READ_MEM && cmd != IOCTL_WRITE_MEM) {
         pr_warn("%s: invalid command\n", DEVICE_NAME);
         return -ENOTTY;
     }
 
     // copy actual read parameters from user space
-    struct read_memory_params params;
+    struct memory_params params;
     if (copy_from_user(&params, (void __user *)arg, sizeof(params))) {
         pr_warn("%s: could not copy parameters from user space\n", DEVICE_NAME);
         return -EFAULT;
@@ -110,29 +130,50 @@ static long device_ioctl(struct file *file, const unsigned int cmd, const unsign
     get_task_struct(task);
     rcu_read_unlock();
 
-    // bytes read (>=0) or a negative error code
-    const int bytes_read = handle_memory_access(task, params.addr, kbuf, params.size);
+    if (cmd == IOCTL_READ_MEM) {
+        // Handle read operation
+        const int bytes_read = memory_read(task, params.addr, kbuf, params.size);
+        put_task_struct(task);
 
-    put_task_struct(task);
-    task = NULL;
+        if (bytes_read < 0) {
+            pr_warn("%s: unable to read memory from process\n", DEVICE_NAME);
+            kvfree(kbuf);
+            return (long)bytes_read;
+        }
 
-    if (bytes_read < 0) {
-        pr_warn("%s: unable to read memory from process\n", DEVICE_NAME);
+        if (bytes_read > 0) {
+            if (copy_to_user(params.buf, kbuf, (size_t)bytes_read)) {
+                pr_warn("%s: unable to copy buffer to user space\n", DEVICE_NAME);
+                kvfree(kbuf);
+                return -EFAULT;
+            }
+        }
+
         kvfree(kbuf);
         return (long)bytes_read;
-    }
-
-    if (bytes_read > 0) {
-        // only copy to user if bytes were actually read into kbuf
-        if (copy_to_user(params.buf, kbuf, (size_t)bytes_read)) {
-            pr_warn("%s: unable to copy buffer to user space\n", DEVICE_NAME);
+    } else if (cmd == IOCTL_WRITE_MEM) {
+        // write memory from userspace buffer into kernel buffer
+        if (copy_from_user(kbuf, params.buf, params.size)) {
+            pr_warn("%s: unable to copy buffer from user space\n", DEVICE_NAME);
+            put_task_struct(task);
             kvfree(kbuf);
             return -EFAULT;
         }
+
+        const int bytes_written = memory_write(task, params.addr, kbuf, params.size);
+        put_task_struct(task);
+
+        if (bytes_written < 0) {
+            pr_warn("%s: unable to write memory to process\n", DEVICE_NAME);
+            kvfree(kbuf);
+            return (long)bytes_written;
+        }
+
+        kvfree(kbuf);
+        return (long)bytes_written;
     }
 
-    kvfree(kbuf);
-    return (long)bytes_read;
+    return 0;
 }
 
 static const struct file_operations file_ops = {
