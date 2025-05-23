@@ -1,11 +1,15 @@
 #include "../include/stealthmem.h"
 
 #include <linux/cdev.h>
+#include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mm_types.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
+
+#include "linux/init.h"
 
 #define DEVICE_NAME "stealthmem"
 #define MAX_MEM_SIZE (1024 * 1024)
@@ -165,11 +169,26 @@ static long device_ioctl(struct file *file, const unsigned int cmd, const unsign
     return 0;
 }
 
+static int device_open(struct inode *inode, struct file *file) {
+    if (!try_module_get(THIS_MODULE)) {
+        return -ENODEV;
+    }
+
+    file->f_mode &= ~(FMODE_PREAD | FMODE_PWRITE);
+    return 0;
+}
+
+static int device_release(struct inode *inode, struct file *file) {
+    module_put(THIS_MODULE);
+    return 0;
+}
+
 // defines operations possible on the char device
 static const struct file_operations file_ops = {
     .owner = THIS_MODULE,
     .unlocked_ioctl = device_ioctl,
-    .open = nonseekable_open,
+    .open = device_open,
+    .release = device_release,
     .llseek = NULL,
 };
 
