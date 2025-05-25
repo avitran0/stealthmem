@@ -91,6 +91,11 @@ if (bytes_written < 0) {
 }
 ```
 
+## performance
+
+on my system, time taken by the ioctl syscall is right between `process_vm_readv` and reading `/proc/{pid}/mem`.
+the former takes 1.5 µs, the latter 1.75 µs. one stealthmem ioctl takes 1.6 µs.
+
 ## sample program
 
 the makefile generates a sample command line program from [test/user.c](test/user.c).
