@@ -2,14 +2,15 @@
 
 #include <linux/cdev.h>
 #include <linux/fs.h>
+#include <linux/init.h>
+#include <linux/input-event-codes.h>
+#include <linux/input.h>
 #include <linux/mm.h>
 #include <linux/mm_types.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/version.h>
-
-#include "linux/init.h"
 
 #define DEVICE_NAME "stealthmem"
 #define MAX_MEM_SIZE (1024 * 1024)
@@ -23,6 +24,7 @@ static int major;
 static struct class *stealthmem_class;
 static struct device *stealthmem_device;
 static struct cdev stealthmem_cdev;
+static struct input_dev *input_device;
 
 // validate memory read parameters, so that id does not read bs data
 static bool validate_params(const struct memory_params *params) {
@@ -73,13 +75,7 @@ static int memory_write(
     return bytes_written;
 }
 
-static long device_ioctl(struct file *file, const unsigned int cmd, const unsigned long arg) {
-    // only valid ioctl is our self-defined one
-    if (cmd != IOCTL_READ_MEM && cmd != IOCTL_WRITE_MEM) {
-        pr_warn("%s: invalid command\n", DEVICE_NAME);
-        return -ENOTTY;
-    }
-
+static int handle_memory(const unsigned int cmd, const unsigned long arg) {
     // copy actual read parameters from user space
     struct memory_params params;
     if (copy_from_user(&params, (void __user *)arg, sizeof(params))) {
@@ -169,6 +165,50 @@ static long device_ioctl(struct file *file, const unsigned int cmd, const unsign
     return 0;
 }
 
+static long device_ioctl(struct file *file, const unsigned int cmd, const unsigned long arg) {
+    // only valid ioctl is our self-defined one
+    if (cmd != IOCTL_READ_MEM && cmd != IOCTL_WRITE_MEM && cmd != IOCTL_MOUSE_MOVE &&
+        cmd != IOCTL_BUTTON) {
+        pr_warn("%s: invalid command\n", DEVICE_NAME);
+        return -ENOTTY;
+    }
+
+    if (cmd == IOCTL_READ_MEM || cmd == IOCTL_WRITE_MEM) {
+        return handle_memory(cmd, arg);
+    } else if (cmd == IOCTL_MOUSE_MOVE) {
+        struct mouse_move move;
+        if (copy_from_user(&move, (void __user *)arg, sizeof(move))) {
+            pr_warn("%s: could not copy parameters from user space\n", DEVICE_NAME);
+            return -EFAULT;
+        }
+
+        if (abs(move.x) > 4096 || abs(move.y) > 4096) {
+            pr_warn("%s: invalid mouse movement: %d/%d\n", DEVICE_NAME, move.x, move.y);
+            return -EINVAL;
+        }
+
+        input_event(input_device, EV_REL, REL_X, move.x);
+        input_event(input_device, EV_REL, REL_Y, move.y);
+        input_sync(input_device);
+    } else {
+        struct button_event btn_event;
+        if (copy_from_user(&btn_event, (void __user *)arg, sizeof(btn_event))) {
+            pr_warn("%s: could not copy parameters from user space\n", DEVICE_NAME);
+            return -EFAULT;
+        }
+
+        if (btn_event.key < KEY_ESC || btn_event.key >= KEY_POWER) {
+            pr_warn("%s: invalid key: %d\n", DEVICE_NAME, btn_event.key);
+            return -EINVAL;
+        }
+
+        input_event(input_device, EV_KEY, btn_event.key, btn_event.press);
+        input_sync(input_device);
+    }
+
+    return 0;
+}
+
 static int device_open(struct inode *inode, struct file *file) {
     if (!try_module_get(THIS_MODULE)) {
         return -ENODEV;
@@ -197,6 +237,7 @@ static int __init stealthmem_init(void) {
     dev_t device = 0;
     pr_info("%s: initializing module\n", DEVICE_NAME);
 
+    // memory chardev
     // allocates a major device number
     result = alloc_chrdev_region(&device, 0, 1, DEVICE_NAME);
     if (result < 0) {
@@ -210,8 +251,7 @@ static int __init stealthmem_init(void) {
     result = cdev_add(&stealthmem_cdev, device, 1);
     if (result < 0) {
         pr_err("%s: failed to add cdev, error %d\n", DEVICE_NAME, result);
-        unregister_chrdev_region(device, 1);
-        return result;
+        goto clean_chrdev;
     }
 
     // class_create changed signature from kernel 6.4
@@ -223,33 +263,80 @@ static int __init stealthmem_init(void) {
     if (IS_ERR(stealthmem_class)) {
         result = PTR_ERR(stealthmem_class);
         pr_err("%s: failed to create device class, error %d\n", DEVICE_NAME, result);
-        cdev_del(&stealthmem_cdev);
-        unregister_chrdev_region(device, 1);
-        return result;
+        goto clean_cdev;
     }
 
     stealthmem_device = device_create(stealthmem_class, NULL, device, NULL, DEVICE_NAME);
     if (IS_ERR(stealthmem_device)) {
         result = PTR_ERR(stealthmem_device);
         pr_err("%s: failed to create device, error %d\n", DEVICE_NAME, result);
-        class_destroy(stealthmem_class);
-        cdev_del(&stealthmem_cdev);
-        unregister_chrdev_region(device, 1);
-        return result;
+        goto clean_class;
+    }
+
+    // input device
+    input_device = input_allocate_device();
+    if (!input_device) {
+        result = -ENOMEM;
+        pr_err("%s: failed to allocate input device\n", DEVICE_NAME);
+        goto clean_device;
+    }
+
+    input_device->name = "@HFD QK65V2 Classic";
+    input_device->id.vendor = 0xFFFE;
+    input_device->id.product = 0x0040;
+    input_device->id.version = 1;
+    input_device->id.bustype = BUS_VIRTUAL;
+
+    // keyboard bits
+    set_bit(EV_KEY, input_device->evbit);
+    for (int i = KEY_ESC; i < KEY_POWER; i++) {
+        set_bit(i, input_device->keybit);
+    }
+
+    // mouse bits
+    set_bit(EV_REL, input_device->evbit);
+    set_bit(REL_X, input_device->relbit);
+    set_bit(REL_Y, input_device->relbit);
+
+    set_bit(BTN_LEFT, input_device->keybit);
+    set_bit(BTN_RIGHT, input_device->keybit);
+
+    result = input_register_device(input_device);
+    if (result) {
+        pr_err("%s: failed to register input device\n", DEVICE_NAME);
+        goto clean_input_device;
     }
 
     pr_info("%s: loaded successfully\n", DEVICE_NAME);
     return 0;
+
+clean_input_device:
+    input_free_device(input_device);
+
+clean_device:
+    device_destroy(stealthmem_class, device);
+clean_class:
+    class_destroy(stealthmem_class);
+clean_cdev:
+    cdev_del(&stealthmem_cdev);
+clean_chrdev:
+    unregister_chrdev_region(device, 1);
+    return result;
 }
 
 static void __exit stealthmem_exit(void) {
     pr_info("%s: unloading module\n", DEVICE_NAME);
     const dev_t device = MKDEV(major, 0);
 
+    // memory chardev
     device_destroy(stealthmem_class, device);
     class_destroy(stealthmem_class);
     cdev_del(&stealthmem_cdev);
     unregister_chrdev_region(device, 1);
+
+    // input device
+    input_unregister_device(input_device);
+    input_free_device(input_device);
 
     pr_info("%s: unloaded\n", DEVICE_NAME);
 }

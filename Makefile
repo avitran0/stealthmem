@@ -3,8 +3,9 @@ BUILD_DIR := $(shell pwd)/build
 
 USER_PROGRAM = user
 TEST_PROGRAM = test
+MOUSE_PROGRAM = mouse
 
-all: module user test
+all: module user test mouse
 
 module:
 	mkdir -p $(BUILD_DIR)
@@ -19,6 +20,10 @@ user: test/user.c
 test: test/test.c
 	gcc -Wall -Wextra -O3 -o build/$(TEST_PROGRAM) $<
 	@echo generated test executable
+
+mouse: test/mouse.c
+	gcc -Wall -Wextra -O3 -o build/$(MOUSE_PROGRAM) $<
+	@echo generated mouse executable
 
 clean:
 	$(MAKE) -C $(KERNEL_DIR) M=$(BUILD_DIR) clean
