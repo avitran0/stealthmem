@@ -8,21 +8,15 @@
 #include "../include/stealthmem.h"
 
 int main(int argc, char *argv[]) {
-    if (argc < 3) {
-        fprintf(stderr, "usage: %s <x> <y>\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "usage: %s <key>\n", argv[0]);
         return 1;
     }
 
     char *endptr = NULL;
-    const int x = strtol(argv[1], &endptr, 10);
+    const int key = strtol(argv[1], &endptr, 10);
     if (endptr == argv[1] || *endptr != '\0') {
         fprintf(stderr, "invalid x: %s\n", argv[1]);
-        return 1;
-    }
-
-    const int y = strtol(argv[2], &endptr, 10);
-    if (endptr == argv[2] || *endptr != '\0') {
-        fprintf(stderr, "invalid y: %s\n", argv[2]);
         return 1;
     }
 
@@ -32,14 +26,23 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    const struct mouse_move move = {.x = x, .y = y};
-    const int result = ioctl(fd, IOCTL_MOUSE_MOVE, &move);
+    struct button_event btn_event = {.key = key, .press = 1};
+    int result = ioctl(fd, IOCTL_BUTTON, &btn_event);
     if (result < 0) {
         perror("ioctl");
         close(fd);
         return 1;
     }
-    printf("moved mouse by %d/%d\n", move.x, move.y);
+
+    btn_event.press = 0;
+    result = ioctl(fd, IOCTL_BUTTON, &btn_event);
+    if (result < 0) {
+        perror("ioctl");
+        close(fd);
+        return 1;
+    }
+
+    printf("pressed key %d\n", btn_event.key);
 
     close(fd);
     return 0;
