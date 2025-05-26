@@ -33,7 +33,7 @@ struct mouse_move {
 };
 
 // used for keyboard and mouse buttons
-struct button_event {
+struct key_press {
     int key;
     unsigned char press;
 };
@@ -41,9 +41,9 @@ struct button_event {
 #define IOCTL_MAGIC_READ 0xBC
 #define IOCTL_MAGIC_WRITE 0xBD
 #define IOCTL_MAGIC_MOUSE 0xBE
-#define IOCTL_MAGIC_BUTTON 0xBF
+#define IOCTL_MAGIC_KEY 0xBF
 
 #define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC_READ, 1, struct memory_params)
 #define IOCTL_WRITE_MEM _IOWR(IOCTL_MAGIC_WRITE, 1, struct memory_params)
 #define IOCTL_MOUSE_MOVE _IOWR(IOCTL_MAGIC_MOUSE, 1, struct mouse_move)
-#define IOCTL_BUTTON _IOWR(IOCTL_MAGIC_BUTTON, 1, struct button_event)
+#define IOCTL_KEY_PRESS _IOWR(IOCTL_MAGIC_KEY, 1, struct key_press)

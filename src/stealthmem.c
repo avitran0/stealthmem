@@ -168,7 +168,7 @@ static int handle_memory(const unsigned int cmd, const unsigned long arg) {
 static long device_ioctl(struct file *file, const unsigned int cmd, const unsigned long arg) {
     // only valid ioctl is our self-defined one
     if (cmd != IOCTL_READ_MEM && cmd != IOCTL_WRITE_MEM && cmd != IOCTL_MOUSE_MOVE &&
-        cmd != IOCTL_BUTTON) {
+        cmd != IOCTL_KEY_PRESS) {
         pr_warn("%s: invalid command\n", DEVICE_NAME);
         return -ENOTTY;
     }
@@ -191,7 +191,7 @@ static long device_ioctl(struct file *file, const unsigned int cmd, const unsign
         input_event(input_device, EV_REL, REL_Y, move.y);
         input_sync(input_device);
     } else {
-        struct button_event btn_event;
+        struct key_press btn_event;
         if (copy_from_user(&btn_event, (void __user *)arg, sizeof(btn_event))) {
             pr_warn("%s: could not copy parameters from user space\n", DEVICE_NAME);
             return -EFAULT;

@@ -1,6 +1,7 @@
 # stealthmem
 
 this is a linux kernel module to read and write process memory without getting detected.
+it is also able to send arbitrary mouse move and key presses.
 
 ## requirements
 
@@ -32,27 +33,8 @@ run `make unload`, or restart computer. the module has to be loaded on every res
 
 ## usage in a program
 
-you can copy these into your program, or use the [header.](include/stealthmem.h)
-
-required struct and ioctl commands:
-
-```c
-#include <fcntl.h>
-#include <stddef.h>
-#include <sys/ioctl.h>
-
-struct memory_params {
-    pid_t pid;
-    unsigned long addr;
-    size_t size;
-    void *buf;
-};
-
-#define IOCTL_MAGIC_READ 0xBC
-#define IOCTL_MAGIC_WRITE 0xBD
-#define IOCTL_READ_MEM _IOWR(IOCTL_MAGIC_READ, 1, struct memory_params)
-#define IOCTL_WRITE_MEM _IOWR(IOCTL_MAGIC_WRITE, 1, struct memory_params)
-```
+get the required structs and ioctl commands from the [header.](include/stealthmem.h)
+you should be able to just include it in your program.
 
 example:
 
@@ -72,34 +54,33 @@ struct memory_params params = {
     .buf = malloc(12),
 };
 
+// all ioctls return a negative error code
+// this returns the number of bytes read on success
 const int bytes_read = ioctl(fd, IOCTL_READ_MEM, &params);
-if (bytes_read < 0) {
-  // returns a negative error code (-EINVAL etc.) on failure
-} else {
-  // success
-}
 
 // if writing/reading string, don't forget the null terminator
 params.buf = "hello, world";
 params.size = 12;
 
 const int bytes_written = ioctl(fd, IOCTL_WRITE_MEM, &params);
-if (bytes_written < 0) {
-  // returns a negative error code (-EINVAL etc.) on failure
-} else {
-  // success
-}
+
+// mouse ioctls return 0 on success, or a negative error code
+const struct mouse_move move = {.x = 20, .y = -35};
+ioctl(fd, IOCTL_MOUSE_MOVE, &move);
+
+// 1 to press, 0 to release a key. keys are defined in <linux/input-event-codes.h>
+const struct key_press key = {.key = KEY_A, .press = 1};
+// as always, negative error code, or 0 on success
+ioctl(fd, IOCTL_KEY_PRESS, &key);
 ```
 
 ## performance
 
-on my system, time taken by the ioctl syscall is right between `process_vm_readv` and reading `/proc/{pid}/mem`.
-the former takes 1.5 µs, the latter 1.75 µs. one stealthmem ioctl takes 1.6 µs.
+on my system, time taken by the ioctl memory syscalls is right between `process_vm_readv` and reading `/proc/{pid}/mem`.
+the former takes 1.5 µs, the latter 1.75 µs. one stealthmem ioctl memory read takes 1.6 µs.
 
-## sample program
+## sample programs
 
-the makefile generates a sample command line program from [test/user.c](test/user.c).
+the makefile generates multiple sample command line programs from [test/mem.c](test/mem.c), [test/mouse.c](test/mouse.c) and [test/key.c](test/key.c).
 
-this can be used with `./build/user <pid> <address> <size>`, where address might be in decimal or hexadecimal.
-
-there is also a sample rust program in [user/src/main.rs](user/src/main.rs), which does exactly the same thing as the c version.
+they can be used as references on how to use the kernel module.

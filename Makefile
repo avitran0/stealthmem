@@ -1,12 +1,11 @@
 KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
 BUILD_DIR := $(shell pwd)/build
 
-USER_PROGRAM = user
-TEST_PROGRAM = test
+MEM_PROGRAM = mem
 MOUSE_PROGRAM = mouse
 KEY_PROGRAM = key
 
-all: module user test mouse key
+all: module mem mouse key
 
 module:
 	mkdir -p $(BUILD_DIR)
@@ -14,12 +13,8 @@ module:
 	$(MAKE) -C $(KERNEL_DIR) M=$(BUILD_DIR) modules
 	@echo generated kernel module
 
-user: test/user.c
-	gcc -Wall -Wextra -O3 -o build/$(USER_PROGRAM) $<
-	@echo generated test executable
-
-test: test/test.c
-	gcc -Wall -Wextra -O3 -o build/$(TEST_PROGRAM) $<
+mem: test/mem.c
+	gcc -Wall -Wextra -O3 -o build/$(MEM_PROGRAM) $<
 	@echo generated test executable
 
 mouse: test/mouse.c

@@ -26,8 +26,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    struct button_event btn_event = {.key = key, .press = 1};
-    int result = ioctl(fd, IOCTL_BUTTON, &btn_event);
+    struct key_press btn_event = {.key = key, .press = 1};
+    int result = ioctl(fd, IOCTL_KEY_PRESS, &btn_event);
     if (result < 0) {
         perror("ioctl");
         close(fd);
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
     }
 
     btn_event.press = 0;
-    result = ioctl(fd, IOCTL_BUTTON, &btn_event);
+    result = ioctl(fd, IOCTL_KEY_PRESS, &btn_event);
     if (result < 0) {
         perror("ioctl");
         close(fd);
