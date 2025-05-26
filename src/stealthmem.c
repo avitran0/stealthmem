@@ -335,8 +335,9 @@ static void __exit stealthmem_exit(void) {
     unregister_chrdev_region(device, 1);
 
     // input device
+    // this function implicitly frees the device
+    // what the fuck
     input_unregister_device(input_device);
-    input_free_device(input_device);
 
     pr_info("%s: unloaded\n", DEVICE_NAME);
 }
