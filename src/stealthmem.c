@@ -13,7 +13,8 @@
 #include <linux/version.h>
 
 #define DEVICE_NAME "stealthmem"
-#define MAX_MEM_SIZE (1024 * 1024)
+#define MAX_MEM_SIZE (256 * 1024 * 1024)
+#define CHUNK_SIZE (1024 * 1024)
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("avitrano");
@@ -41,38 +42,6 @@ static bool validate_params(const struct memory_params *params) {
         return false;
     }
     return true;
-}
-
-// returns bytes read, or negative error code
-static int memory_read(
-    struct task_struct *task, const unsigned long address, void *kbuf, const size_t size) {
-    struct mm_struct *mm = get_task_mm(task);
-    if (!mm) {
-        return -ESRCH;
-    }
-
-    down_read(&mm->mmap_lock);
-    const int bytes_read = access_process_vm(task, address, kbuf, (int)size, 0);
-    up_read(&mm->mmap_lock);
-
-    mmput(mm);
-    return bytes_read;
-}
-
-static int memory_write(
-    struct task_struct *task, const unsigned long address, void *kbuf, const size_t size) {
-    struct mm_struct *mm = get_task_mm(task);
-    if (!mm) {
-        return -ESRCH;
-    }
-
-    down_read(&mm->mmap_lock);
-    const int bytes_written =
-        access_process_vm(task, address, kbuf, (int)size, FOLL_WRITE | FOLL_FORCE);
-    up_read(&mm->mmap_lock);
-
-    mmput(mm);
-    return bytes_written;
 }
 
 static int handle_memory(const unsigned int cmd, const unsigned long arg) {
@@ -119,47 +88,58 @@ static int handle_memory(const unsigned int cmd, const unsigned long arg) {
     get_task_struct(task);
     rcu_read_unlock();
 
-    if (cmd == IOCTL_READ_MEM) {
-        const int bytes_read = memory_read(task, params.addr, kbuf, params.size);
+    struct mm_struct *mm = get_task_mm(task);
+    if (!mm) {
+        pr_warn("%s: no memory map for process %d\n", DEVICE_NAME, params.pid);
         put_task_struct(task);
+        kvfree(kbuf);
+        return -ESRCH;
+    }
 
-        if (bytes_read < 0) {
-            pr_warn("%s: unable to read memory from process\n", DEVICE_NAME);
-            kvfree(kbuf);
-            return (long)bytes_read;
+    size_t processed = 0;
+    int result = 0;
+    // have to handle larger reads in chunks
+    while (processed < params.size) {
+        const size_t chunk = min_t(size_t, params.size - processed, CHUNK_SIZE);
+        const unsigned long addr = params.addr + processed;
+        int bytes_handled = 0;
+
+        down_read(&mm->mmap_lock);
+        if (cmd == IOCTL_READ_MEM) {
+            bytes_handled = access_process_vm(task, addr, kbuf, chunk, 0);
+        } else if (cmd == IOCTL_WRITE_MEM) {
+            if (copy_from_user(kbuf, params.buf + processed, chunk)) {
+                up_read(&mm->mmap_lock);
+                pr_warn("%s: failed to copy buffer from user space\n", DEVICE_NAME);
+                result = -EFAULT;
+                break;
+            }
+            bytes_handled = access_process_vm(task, addr, kbuf, chunk, FOLL_WRITE | FOLL_FORCE);
+        }
+        up_read(&mm->mmap_lock);
+
+        // read/write failed
+        if (bytes_handled <= 0) {
+            if (processed == 0) {
+                result = bytes_handled < 0 ? bytes_handled : -EIO;
+            }
+            break;
         }
 
-        // copy kernel buffer back to user space
-        if (bytes_read > 0) {
-            if (copy_to_user(params.buf, kbuf, (size_t)bytes_read)) {
-                pr_warn("%s: unable to copy buffer to user space\n", DEVICE_NAME);
-                kvfree(kbuf);
-                return -EFAULT;
+        if (cmd == IOCTL_READ_MEM) {
+            if (copy_to_user(params.buf + processed, kbuf, bytes_handled)) {
+                pr_warn("%s: failed to copy buffer to user space\n", DEVICE_NAME);
+                result = -EFAULT;
+                break;
             }
         }
 
-        kvfree(kbuf);
-        return (long)bytes_read;
-    } else if (cmd == IOCTL_WRITE_MEM) {
-        // copy memory from user space buffer into kernel buffer
-        if (copy_from_user(kbuf, params.buf, params.size)) {
-            pr_warn("%s: unable to copy buffer from user space\n", DEVICE_NAME);
-            put_task_struct(task);
-            kvfree(kbuf);
-            return -EFAULT;
+        processed += bytes_handled;
+        result = processed;
+
+        if ((size_t)bytes_handled < chunk) {
+            break;
         }
-
-        const int bytes_written = memory_write(task, params.addr, kbuf, params.size);
-        put_task_struct(task);
-
-        if (bytes_written < 0) {
-            pr_warn("%s: unable to write memory to process\n", DEVICE_NAME);
-            kvfree(kbuf);
-            return (long)bytes_written;
-        }
-
-        kvfree(kbuf);
-        return (long)bytes_written;
     }
 
     return 0;
