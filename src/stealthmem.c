@@ -98,11 +98,11 @@ static int handle_memory(const unsigned int cmd, const unsigned long arg) {
 
     size_t processed = 0;
     int result = 0;
+    int bytes_handled = 0;
     // have to handle larger reads in chunks
     while (processed < params.size) {
         const size_t chunk = min_t(size_t, params.size - processed, CHUNK_SIZE);
         const unsigned long addr = params.addr + processed;
-        int bytes_handled = 0;
 
         down_read(&mm->mmap_lock);
         if (cmd == IOCTL_READ_MEM) {
@@ -142,7 +142,7 @@ static int handle_memory(const unsigned int cmd, const unsigned long arg) {
         }
     }
 
-    return 0;
+    return bytes_handled;
 }
 
 static long device_ioctl(struct file *file, const unsigned int cmd, const unsigned long arg) {
